@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   PlusCircle, 
   Trash2, 
@@ -14,7 +14,6 @@ import {
   Split,
   Tag
 } from 'lucide-react';
-import React, { useRef } from 'react';
 
 type Currency = {
   code: string;
