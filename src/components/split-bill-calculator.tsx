@@ -14,6 +14,7 @@ import {
   Split,
   Tag
 } from 'lucide-react';
+import React, { useRef } from 'react';
 
 type Currency = {
   code: string;
@@ -68,13 +69,13 @@ const BillCalculator = () => {
   const [activePopup, setActivePopup] = React.useState({ itemId: null, type: null });
   const [tempSharedQty, setTempSharedQty] = React.useState(1);
   const [tempDiscount, setTempDiscount] = React.useState({ type: 'percentage', value: 0 });
-  const lastItemRef = React.useRef(null);
-  const membersRef = React.useRef(null);
-  const additionalFeesRef = React.useRef(null);
-  const summaryRef = React.useRef(null);
+  const lastItemRef = useRef<HTMLDivElement>(null);
+  const membersRef = useRef<HTMLDivElement>(null);
+  const additionalFeesRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
 
-  const scrollToElement = (ref: React.RefObject<HTMLElement>): void => {
-    if (ref.current) {
+  const scrollToElement = (ref: React.RefObject<HTMLDivElement>): void => {
+    if (ref.current instanceof HTMLElement) {
       ref.current.scrollIntoView({
         behavior: 'smooth',
         block: 'center'
@@ -125,7 +126,7 @@ const BillCalculator = () => {
     })));
   };
 
-  const addItem = () => {
+  const addItem = (): void => {
     const newItemId = Date.now();
     setItems([
       ...items,
@@ -141,7 +142,7 @@ const BillCalculator = () => {
     ]);
   
     setTimeout(() => {
-      if (lastItemRef.current) {
+      if (lastItemRef.current instanceof HTMLElement) {
         lastItemRef.current.scrollIntoView({ 
           behavior: 'smooth',
           block: 'center'
@@ -493,7 +494,7 @@ const BillCalculator = () => {
           <div className="space-y-4">
           {items.map((item, index) => (
             <div 
-              key={item.id} 
+              key={item.id}
               ref={index === items.length - 1 ? lastItemRef : null}
               className="space-y-3 bg-gray-700/30 p-4 rounded-lg relative"
             >
