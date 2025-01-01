@@ -527,69 +527,59 @@ const BillCalculator = () => {
               className="space-y-3 bg-gray-700/30 p-4 rounded-lg relative"
             >
                 <div className="flex items-center gap-2">
+                  {/* Item Name Field */}
                   <input
                     type="text"
                     placeholder="Item name"
                     value={item.name}
                     onChange={(e) => updateItem(item.id, 'name', e.target.value)}
-                    className="flex-1 bg-gray-700/50 rounded-lg px-2 sm:px-3 py-2 text-sm sm:text-base min-w-0"
+                    className="flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm min-w-0"
                   />
-                  <input
-                    type="number"
-                    placeholder="Qty"
-                    value={item.qty || ''}
-                    onChange={(e) => updateItem(item.id, 'qty', e.target.value)}
-                    min="1"
-                    className="w-14 sm:w-20 bg-gray-700/50 rounded-lg px-1 sm:px-2 py-2 text-sm sm:text-base"
-                  />
+
+                  {/* Quantity with Smaller Increment/Decrement Buttons */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => updateItem(item.id, 'qty', Math.max(1, item.qty - 1))}
+                      className="w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      aria-label="Decrease Quantity"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      value={item.qty}
+                      min="1"
+                      onChange={(e) => updateItem(item.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-12 text-center bg-gray-700/50 text-sm px-1 py-1 rounded-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateItem(item.id, 'qty', item.qty + 1)}
+                      className="w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      aria-label="Increase Quantity"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Price Field */}
                   <input
                     type="number"
                     placeholder="Price"
                     value={item.price || ''}
                     onChange={(e) => updateItem(item.id, 'price', e.target.value)}
                     min="0"
-                    className="w-20 sm:w-24 bg-gray-700/50 rounded-lg px-1 sm:px-2 py-2 text-sm sm:text-base"
+                    className="w-20 flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm"
                   />
+
+                  {/* Remove Item Button */}
                   <button
                     onClick={() => removeItem(item.id)}
-                    className="p-1.5 sm:p-2 text-red-400 hover:text-red-300"
+                    className="p-2 text-red-400 hover:text-red-300"
                   >
                     <Trash2 size={16} />
                   </button>
-                  <div className="relative item-menu">
-                    <button
-                      onClick={() => setItemMenuOpen(itemMenuOpen === item.id ? null : item.id)}
-                      className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-300 item-menu-trigger"
-                    >
-                      <MoreVertical size={16} />
-                    </button>
-                    
-                    {itemMenuOpen === item.id && (
-                      <div className="absolute right-0 mt-2 w-48 py-2 bg-gray-800 rounded-lg shadow-xl z-10">
-                        <button
-                          className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
-                          onClick={() => handleShareClick(item)}
-                        >
-                          <Split size={16} />
-                          Share Item
-                        </button>
-                        <button
-                          className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
-                          onClick={() => {
-                            setTempDiscount({
-                              type: item.discount?.type || 'percentage',
-                              value: item.discount?.value || 0
-                            });
-                            setActivePopup({ itemId: item.id, type: 'discount' });
-                            setItemMenuOpen(null);
-                          }}
-                        >
-                          <Tag size={16} />
-                          Add Discount
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* Display shared quantity and discount if applied */}
@@ -628,32 +618,52 @@ const BillCalculator = () => {
 
                 {/* Members Section for Splitting */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {members.map(member => {
-                    // Create a definite split object - either the existing one or a new one with quantity 0
-                    const split = item.splits.find(s => s.memberId === member.id) ?? {
-                      memberId: member.id,
-                      quantity: 0
-                    };
+                  {members.map((member) => {
+                    const split = item.splits.find((s) => s.memberId === member.id) ?? { memberId: member.id, quantity: 0 };
 
                     return (
                       <div key={member.id} className="flex items-center gap-2 bg-gray-700/20 p-2 rounded-lg">
-                        <div className={`w-8 h-8 rounded-full ${member.color} flex items-center justify-center`}>
+                        {/* Member Initial */}
+                        <div className={`w-6 h-6 rounded-full ${member.color} flex items-center justify-center`}>
                           {member.name[0].toUpperCase()}
                         </div>
-                        <span className="flex-grow text-sm sm:text-base">{member.name}</span>
-                        <input
-                          type="number"
-                          value={split.quantity}  // Now quantity is guaranteed to exist
-                          onChange={(e) => updateItemSplit(item.id, member.id, Number(e.target.value))}
-                          className="w-16 sm:w-20 bg-gray-700/50 rounded-lg px-2 sm:px-3 py-1 text-sm sm:text-base"
-                          placeholder="0"
-                          min="0"
-                          max={Number(item.sharedQty) > 1 ? item.sharedQty : item.qty}
-                          step="1"
-                          onWheel={(e) => {
-                            (e.target as HTMLInputElement).blur();
-                          }}
-                        />
+
+                        {/* Member Name */}
+                        <span className="flex-grow text-sm">{member.name}</span>
+
+                        {/* Quantity with Increment/Decrement Buttons */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateItemSplit(item.id, member.id, Math.max(0, split.quantity - 1))
+                            }
+                            className="w-5 h-5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            aria-label="Decrease Quantity"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            value={split.quantity}
+                            min="0"
+                            max={Number(item.sharedQty) > 1 ? item.sharedQty : item.qty}
+                            onChange={(e) =>
+                              updateItemSplit(item.id, member.id, Math.max(0, parseInt(e.target.value) || 0))
+                            }
+                            className="w-10 text-center bg-gray-700/50 text-xs px-1 py-1 rounded-md"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateItemSplit(item.id, member.id, Math.min(Number(item.qty), split.quantity + 1))
+                            }
+                            className="w-5 h-5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            aria-label="Increase Quantity"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -665,27 +675,60 @@ const BillCalculator = () => {
                       <div className="bg-gray-800 p-4 sm:p-6 rounded-xl w-full max-w-sm sm:w-96 space-y-4">
                         <h3 className="text-lg font-semibold">Share {item.name}</h3>
                         <div className="space-y-4">
-                        <div>
+                        <div className="space-y-2">
                           <label className="block text-sm text-gray-400 mb-1">Number of people sharing:</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max={20}
-                            value={tempSharedQty}
-                            onChange={(e) => {
-                              const inputValue = parseInt(e.target.value) || 1;
-                              setTempSharedQty(Math.min(Math.max(1, inputValue), 20));
-                            }}
-                            className="w-full bg-gray-700/50 rounded-lg px-3 py-2"
-                            onWheel={(e) => {
-                              (e.target as HTMLInputElement).blur();
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === '-' || e.key === 'e' || e.key === '.') {
-                                e.preventDefault();
-                              }
-                            }}
-                          />
+                          <div className="flex items-center justify-center space-x-2">
+                            {/* Decrement Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (tempSharedQty > 1) {
+                                  setTempSharedQty(tempSharedQty - 1);
+                                }
+                              }}
+                              className="w-12 h-12 bg-gray-600 text-white text-xl rounded-full hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Decrease"
+                              disabled={tempSharedQty <= 1} // Disable button when at minimum value
+                            >
+                              -
+                            </button>
+
+                            {/* Input Field */}
+                            <input
+                              type="number"
+                              min="1"
+                              max="20"
+                              value={tempSharedQty}
+                              onChange={(e) => {
+                                const inputValue = parseInt(e.target.value) || 1;
+                                setTempSharedQty(Math.min(Math.max(1, inputValue), 20));
+                              }}
+                              className="w-16 text-center bg-gray-700/50 text-lg px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              onWheel={(e) => {
+                                (e.target as HTMLInputElement).blur();
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === '-' || e.key === 'e' || e.key === '.') {
+                                  e.preventDefault();
+                                }
+                              }}
+                            />
+
+                            {/* Increment Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (tempSharedQty < 20) {
+                                  setTempSharedQty(tempSharedQty + 1);
+                                }
+                              }}
+                              className="w-12 h-12 bg-gray-600 text-white text-xl rounded-full hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Increase"
+                              disabled={tempSharedQty >= 20} // Disable button when at maximum value
+                            >
+                              +
+                            </button>
+                          </div>
                         </div>
                           <div className="text-sm bg-gray-700/20 p-3 rounded-lg space-y-2">
                             <div className="flex justify-between">
