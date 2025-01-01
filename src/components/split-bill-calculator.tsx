@@ -528,92 +528,98 @@ const BillCalculator = () => {
               ref={index === items.length - 1 ? lastItemRef : null}
               className="space-y-3 bg-gray-700/30 p-4 rounded-lg relative"
             >
-                <div className="flex items-center gap-2">
-                  {/* Item Name Field */}
-                  <input
-                    type="text"
-                    placeholder="Item name"
-                    value={item.name}
-                    onChange={(e) => updateItem(item.id, 'name', e.target.value)}
-                    className="flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm min-w-0"
-                  />
-
-                  {/* Quantity with Increment/Decrement Buttons */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (item.qty > 1) {
-                          updateItem(item.id, 'qty', item.qty - 1);
-                        }
-                      }}
-                      className={`w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        item.qty <= 1 ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                      aria-label="Decrease Quantity"
-                      disabled={item.qty <= 1}
-                    >
-                      -
-                    </button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  {/* Row 1: Item Name & Quantity */}
+                  <div className="flex gap-2 flex-1">
+                    {/* Item Name Field */}
                     <input
-                      type="number"
-                      value={item.qty}
-                      min="1"
-                      max={Number(item.sharedQty) || 1} // Sesuaikan dengan maxValue
-                      onChange={(e) => {
-                        const inputValue = e.target.value;
-                        const parsedValue = parseInt(inputValue, 10);
-                        if (inputValue === '') {
-                          updateItem(item.id, 'qty', 0); // Tetapkan nilai sementara kosong
-                        } else {
-                          updateItem(item.id, 'qty', Math.min(parsedValue, item.sharedQty || parsedValue));
-                        }
-                      }}
-                      className="w-12 text-center bg-gray-700/50 text-sm px-1 py-1 rounded-md"
+                      type="text"
+                      placeholder="Item name"
+                      value={item.name}
+                      onChange={(e) => updateItem(item.id, 'name', e.target.value)}
+                      className="flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm min-w-0"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const maxQty = item.sharedQty > 1 ? item.sharedQty : item.qty + 1;
-                        updateItem(item.id, 'qty', Math.min(item.qty + 1, maxQty));
-                      }}
-                      className={`w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        item.qty >= (item.sharedQty > 1 ? item.sharedQty : Infinity) ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                      aria-label="Increase Quantity"
-                      disabled={item.qty >= (item.sharedQty > 1 ? item.sharedQty : Infinity)}
-                    >
-                      +
-                    </button>
+
+                    {/* Quantity with Increment/Decrement Buttons */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (item.qty > 1) {
+                            updateItem(item.id, 'qty', item.qty - 1);
+                          }
+                        }}
+                        className={`w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          item.qty <= 1 ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                        aria-label="Decrease Quantity"
+                        disabled={item.qty <= 1}
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        value={item.qty}
+                        min="1"
+                        max={Number(item.sharedQty) || 1} // Sesuaikan dengan maxValue
+                        onChange={(e) => {
+                          const inputValue = e.target.value;
+                          const parsedValue = parseInt(inputValue, 10);
+                          if (inputValue === '') {
+                            updateItem(item.id, 'qty', 0); // Tetapkan nilai sementara kosong
+                          } else {
+                            updateItem(item.id, 'qty', Math.min(parsedValue, item.sharedQty || parsedValue));
+                          }
+                        }}
+                        className="w-12 text-center bg-gray-700/50 text-sm px-1 py-1 rounded-md"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const maxQty = item.sharedQty > 1 ? item.sharedQty : item.qty + 1;
+                          updateItem(item.id, 'qty', Math.min(item.qty + 1, maxQty));
+                        }}
+                        className={`w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          item.qty >= (item.sharedQty > 1 ? item.sharedQty : Infinity) ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                        aria-label="Increase Quantity"
+                        disabled={item.qty >= (item.sharedQty > 1 ? item.sharedQty : Infinity)}
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Price Field */}
-                  <input
-                    type="number"
-                    placeholder="Price"
-                    value={item.price || ''}
-                    onChange={(e) => updateItem(item.id, 'price', e.target.value)}
-                    min="0"
-                    className="w-20 flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm"
-                  />
+                  {/* Row 2: Price, Delete & Three Dots */}
+                  <div className="flex gap-2 items-center">
+                    {/* Price Field */}
+                    <input
+                      type="number"
+                      placeholder="Price"
+                      value={item.price || ''}
+                      onChange={(e) => updateItem(item.id, 'price', e.target.value)}
+                      min="0"
+                      className="flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm min-w-[120px]"
+                    />
 
-                  {/* Trash Button */}
-                  <button
-                    onClick={() => removeItem(item.id)}
-                    className="p-2 text-red-400 hover:text-red-300"
-                    aria-label="Delete Item"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-
-                  {/* Three Dots Menu */}
-                  <div className="relative item-menu">
+                    {/* Trash Button */}
                     <button
-                      onClick={() => setItemMenuOpen(itemMenuOpen === item.id ? null : item.id)}
-                      className="p-2 text-gray-400 hover:text-gray-300 item-menu-trigger"
+                      onClick={() => removeItem(item.id)}
+                      className="p-2 text-red-400 hover:text-red-300"
+                      aria-label="Delete Item"
                     >
-                      <MoreVertical size={16} />
+                      <Trash2 size={16} />
                     </button>
+
+                    {/* Three Dots Menu */}
+                    <div className="relative item-menu">
+                      <button
+                        onClick={() => setItemMenuOpen(itemMenuOpen === item.id ? null : item.id)}
+                        className="p-2 text-gray-400 hover:text-gray-300 item-menu-trigger"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+                    </div>
 
                     {/* Dropdown Menu (optional) */}
                     {itemMenuOpen === item.id && (
