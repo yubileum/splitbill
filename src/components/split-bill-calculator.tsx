@@ -34,10 +34,7 @@ type Item = {
   qty: number;
   sharedQty: number;
   splits: Split[];
-  discount?: {
-    type: 'percentage' | 'amount';
-    value: number;
-  };
+  discount: Discount;  // Make discount required, not optional
 };
 
 type Split = {
@@ -57,6 +54,11 @@ type PopupState = {
   type: string | null;
 };
 
+type Discount = {
+  type: 'percentage' | 'amount';
+  value: number;
+};
+
 const BillCalculator = () => {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>({ 
     code: 'IDR', 
@@ -72,7 +74,7 @@ const BillCalculator = () => {
   const [itemMenuOpen, setItemMenuOpen] = useState<number | null>(null);
   const [activePopup, setActivePopup] = useState<PopupState>({ itemId: null, type: null });
   const [tempSharedQty, setTempSharedQty] = useState(1);
-  const [tempDiscount, setTempDiscount] = useState({ type: 'percentage', value: 0 });
+  const [tempDiscount, setTempDiscount] = useState<Discount>({ type: 'percentage', value: 0 });
   const lastItemRef = useRef<HTMLDivElement>(null);
   const membersRef = useRef<HTMLDivElement>(null);
   const additionalFeesRef = useRef<HTMLDivElement>(null);
@@ -140,7 +142,7 @@ const BillCalculator = () => {
         price: 0,
         qty: 1,
         sharedQty: 1,
-        splits: [],
+        splits: [] as Split[],  // Explicitly type the empty array
         discount: { type: 'percentage', value: 0 }
       }
     ]);
@@ -171,23 +173,27 @@ const BillCalculator = () => {
   const updateItemSplit = (itemId: number, memberId: number, quantity: number): void => {
     setItems(items.map(item => {
       if (item.id === itemId) {
-        // Ensure we're working with valid numbers
         const parsedQuantity = Math.max(0, Math.floor(Number(quantity) || 0));
-        const currentSplit = item.splits?.find(s => s.memberId === memberId);
-        const otherSplitsTotal = (item.splits || []).reduce((sum, s) => 
-          s.memberId === memberId ? sum : sum + (Number(s.quantity) || 0), 0
+        const currentSplit = item.splits.find(s => s.memberId === memberId);
+        const otherSplitsTotal = item.splits.reduce((sum, s) => 
+          s.memberId === memberId ? sum : sum + s.quantity, 0
         );
         
-        // If item is shared, use sharedQty as max, otherwise use item.qty
         const maxAllowedQuantity = Number(item.sharedQty) > 1 
           ? Math.max(0, Number(item.sharedQty) - otherSplitsTotal)
           : Math.max(0, Number(item.qty) - otherSplitsTotal);
   
         const newQuantity = Math.min(parsedQuantity, maxAllowedQuantity);
   
-        const newSplits = currentSplit
-          ? (item.splits || []).map(s => s.memberId === memberId ? { ...s, quantity: newQuantity } : s)
-          : [...(item.splits || []), { memberId, quantity: newQuantity }];
+        // Create new splits array
+        let newSplits: Split[];
+        if (currentSplit) {
+          newSplits = item.splits.map(s => 
+            s.memberId === memberId ? { ...s, quantity: newQuantity } : s
+          );
+        } else {
+          newSplits = [...item.splits, { memberId, quantity: newQuantity }];
+        }
   
         return { ...item, splits: newSplits };
       }
@@ -228,7 +234,7 @@ const BillCalculator = () => {
   const updateItemDiscount = (itemId: number): void => {
     setItems(items.map(item => 
       item.id === itemId
-        ? { ...item, discount: { ...tempDiscount } }
+        ? { ...item, discount: { type: tempDiscount.type, value: tempDiscount.value } }
         : item
     ));
     setActivePopup({ itemId: null, type: null });
@@ -553,7 +559,10 @@ const BillCalculator = () => {
                         <button
                           className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
                           onClick={() => {
-                            setTempDiscount(item.discount);
+                            setTempDiscount({
+                              type: item.discount?.type || 'percentage',
+                              value: item.discount?.value || 0
+                            });
                             setActivePopup({ itemId: item.id, type: 'discount' });
                             setItemMenuOpen(null);
                           }}
@@ -602,28 +611,28 @@ const BillCalculator = () => {
 
                 {/* Members Section for Splitting */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {members.map(member => {
-                    const split = item.splits.find(s => s.memberId === member.id) || { quantity: 0 };
-                    return (
-                      <div key={member.id} className="flex items-center gap-2 bg-gray-700/20 p-2 rounded-lg">
-                        <div className={`w-8 h-8 rounded-full ${member.color} flex items-center justify-center`}>
-                          {member.name[0].toUpperCase()}
-                        </div>
-                        <span className="flex-grow text-sm sm:text-base">{member.name}</span>
-                        <input
-                          type="number"
-                          value={Number(split.quantity) || ''}
-                          onChange={(e) => updateItemSplit(item.id, member.id, e.target.value)}
-                          className="w-16 sm:w-20 bg-gray-700/50 rounded-lg px-2 sm:px-3 py-1 text-sm sm:text-base"
-                          placeholder="0"
-                          min="0"
-                          max={Number(item.sharedQty) > 1 ? item.sharedQty : item.qty}
-                          step="1"
-                          onWheel={(e) => e.target.blur()}
-                        />
+                {members.map(member => {
+                  const split = item.splits.find(s => s.memberId === member.id);
+                  return (
+                    <div key={member.id} className="flex items-center gap-2 bg-gray-700/20 p-2 rounded-lg">
+                      <div className={`w-8 h-8 rounded-full ${member.color} flex items-center justify-center`}>
+                        {member.name[0].toUpperCase()}
                       </div>
-                    );
-                  })}
+                      <span className="flex-grow text-sm sm:text-base">{member.name}</span>
+                      <input
+                        type="number"
+                        value={split?.quantity || 0}  // Use optional chaining and default to 0
+                        onChange={(e) => updateItemSplit(item.id, member.id, Number(e.target.value))}
+                        className="w-16 sm:w-20 bg-gray-700/50 rounded-lg px-2 sm:px-3 py-1 text-sm sm:text-base"
+                        placeholder="0"
+                        min="0"
+                        max={Number(item.sharedQty) > 1 ? item.sharedQty : item.qty}
+                        step="1"
+                        onWheel={(e) => e.target.blur()}
+                      />
+                    </div>
+                  );
+                })}
                 </div>
 
                 {/* Safe Share PopUp */}
