@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { 
   PlusCircle, 
   Trash2, 
@@ -53,21 +53,21 @@ type Fee = {
 };
 
 const BillCalculator = () => {
-  const [selectedCurrency, setSelectedCurrency] = React.useState<Currency>({ 
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>({ 
     code: 'IDR', 
     symbol: 'Rp', 
     name: 'Indonesian Rupiah' 
   });
-  const [members, setMembers] = React.useState<Member[]>([]);
-  const [items, setItems] = React.useState<Item[]>([]);
-  const [additionalFees, setAdditionalFees] = React.useState<Fee[]>([]);
-  const [newMemberName, setNewMemberName] = React.useState('');
-  const [newFee, setNewFee] = React.useState({ name: '', value: '', type: 'percentage' });
-  const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = React.useState(false);
-  const [itemMenuOpen, setItemMenuOpen] = React.useState(null);
-  const [activePopup, setActivePopup] = React.useState({ itemId: null, type: null });
-  const [tempSharedQty, setTempSharedQty] = React.useState(1);
-  const [tempDiscount, setTempDiscount] = React.useState({ type: 'percentage', value: 0 });
+  const [members, setMembers] = useState<Member[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [additionalFees, setAdditionalFees] = useState<Fee[]>([]);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newFee, setNewFee] = useState({ name: '', value: '', type: 'percentage' });
+  const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState(false);
+  const [itemMenuOpen, setItemMenuOpen] = useState(null);
+  const [activePopup, setActivePopup] = useState({ itemId: null, type: null });
+  const [tempSharedQty, setTempSharedQty] = useState(1);
+  const [tempDiscount, setTempDiscount] = useState({ type: 'percentage', value: 0 });
   const lastItemRef = useRef<HTMLDivElement>(null);
   const membersRef = useRef<HTMLDivElement>(null);
   const additionalFeesRef = useRef<HTMLDivElement>(null);
@@ -381,7 +381,7 @@ const BillCalculator = () => {
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest('.currency-dropdown')) {
         setIsCurrencyDropdownOpen(false);
