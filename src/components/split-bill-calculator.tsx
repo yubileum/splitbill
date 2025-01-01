@@ -619,34 +619,34 @@ const BillCalculator = () => {
                       >
                         <MoreVertical size={16} />
                       </button>
-                    </div>
 
-                    {/* Dropdown Menu (optional) */}
-                    {itemMenuOpen === item.id && (
-                    <div className="absolute right-0 mt-2 w-48 py-2 bg-gray-800 rounded-lg shadow-xl z-10">
-                      <button
-                        className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
-                        onClick={() => handleShareClick(item)}
-                      >
-                        <Split size={16} /> {/* Icon for Share */}
-                        Share Item
-                      </button>
-                      <button
-                        className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
-                        onClick={() => {
-                          setTempDiscount({
-                            type: item.discount?.type || 'percentage',
-                            value: item.discount?.value || 0
-                          });
-                          setActivePopup({ itemId: item.id, type: 'discount' });
-                          setItemMenuOpen(null);
-                        }}
-                      >
-                        <Tag size={16} /> {/* Icon for Discount */}
-                        Add Discount
-                      </button>
+                      {/* Dropdown Menu (optional) */}
+                      {itemMenuOpen === item.id && (
+                      <div className="absolute right-0 mt-2 w-48 py-2 bg-gray-800 rounded-lg shadow-xl z-10">
+                        <button
+                          className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                          onClick={() => handleShareClick(item)}
+                        >
+                          <Split size={16} /> {/* Icon for Share */}
+                          Share Item
+                        </button>
+                        <button
+                          className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                          onClick={() => {
+                            setTempDiscount({
+                              type: item.discount?.type || 'percentage',
+                              value: item.discount?.value || 0
+                            });
+                            setActivePopup({ itemId: item.id, type: 'discount' });
+                            setItemMenuOpen(null);
+                          }}
+                        >
+                          <Tag size={16} /> {/* Icon for Discount */}
+                          Add Discount
+                        </button>
+                      </div>
+                    )}
                     </div>
-                  )}
                   </div>
                 </div>
 
