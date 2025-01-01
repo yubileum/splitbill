@@ -69,7 +69,11 @@ const BillCalculator = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [additionalFees, setAdditionalFees] = useState<Fee[]>([]);
   const [newMemberName, setNewMemberName] = useState('');
-  const [newFee, setNewFee] = useState({ name: '', value: '', type: 'percentage' });
+  const [newFee, setNewFee] = useState<Omit<Fee, 'id'>>({ 
+    name: '', 
+    value: '', 
+    type: 'percentage' as const 
+  });
   const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState(false);
   const [itemMenuOpen, setItemMenuOpen] = useState<number | null>(null);
   const [activePopup, setActivePopup] = useState<PopupState>({ itemId: null, type: null });
@@ -80,14 +84,15 @@ const BillCalculator = () => {
   const additionalFeesRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
-  const scrollToElement = (ref: React.RefObject<HTMLDivElement>): void => {
-    if (ref.current instanceof HTMLElement) {
-      ref.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
-      });
+  const scrollToElement = (ref: React.RefObject<HTMLDivElement | null>): void => {
+    if (ref.current) {
+        ref.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+        });
     }
   };
+
 
   const currencies = [
     { code: 'IDR', symbol: 'Rp', name: 'Indonesian Rupiah' },
@@ -142,7 +147,7 @@ const BillCalculator = () => {
         price: 0,
         qty: 1,
         sharedQty: 1,
-        splits: [] as Split[],  // Explicitly type the empty array
+        splits: [] as Split[],
         discount: { type: 'percentage', value: 0 }
       }
     ]);
@@ -327,8 +332,14 @@ const BillCalculator = () => {
   
     // Calculate member's share of items
     items.forEach(item => {
-      const split = item.splits.find(s => s.memberId === memberId);
-      if (split?.quantity > 0) {
+      // Create a definite split object
+      const split = item.splits.find(s => s.memberId === memberId) ?? { 
+        memberId: memberId, 
+        quantity: 0 
+      };
+
+      // Now we can safely check the quantity
+      if (split.quantity > 0) {
         if (Number(item.sharedQty) > 1) {
           // For shared items
           const basePrice = Number(item.price) || 0;
@@ -362,19 +373,17 @@ const BillCalculator = () => {
         }
       }
     });
-  
+
     let totalAfterFees = memberSubtotal;
   
-    // Calculate additional fees (tax, service charge)
+    // Calculate additional fees (rest of the code remains the same)
     if (memberSubtotal > 0 && totalSubtotal > 0) {
       additionalFees.forEach(fee => {
         const feeValue = parseFloat(fee.value) || 0;
         if (fee.type === 'percentage') {
-          // Calculate percentage fee based on proportion of subtotal
           const memberProportion = memberSubtotal / totalSubtotal;
           totalAfterFees += (totalSubtotal * (feeValue / 100)) * memberProportion;
         } else {
-          // Split fixed fees equally
           totalAfterFees += feeValue / members.length;
         }
       });
@@ -383,12 +392,20 @@ const BillCalculator = () => {
     return totalAfterFees;
   };
 
-  const addFee = () => {
+  const addFee = (): void => {
     if (newFee.name && newFee.value) {
-      setAdditionalFees([...additionalFees, { ...newFee, id: Date.now() }]);
+      const newFeeWithId: Fee = {
+        ...newFee,
+        id: Date.now(),
+        type: newFee.type as 'percentage' | 'amount'
+      };
+      
+      setAdditionalFees([...additionalFees, newFeeWithId]);
       setNewFee({ name: '', value: '', type: 'percentage' });
       
-      setTimeout(() => scrollToElement(additionalFeesRef), 100);
+      if (additionalFeesRef.current) {
+        setTimeout(() => scrollToElement(additionalFeesRef), 100);
+      }
     }
   };
 
@@ -611,28 +628,35 @@ const BillCalculator = () => {
 
                 {/* Members Section for Splitting */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {members.map(member => {
-                  const split = item.splits.find(s => s.memberId === member.id);
-                  return (
-                    <div key={member.id} className="flex items-center gap-2 bg-gray-700/20 p-2 rounded-lg">
-                      <div className={`w-8 h-8 rounded-full ${member.color} flex items-center justify-center`}>
-                        {member.name[0].toUpperCase()}
+                  {members.map(member => {
+                    // Create a definite split object - either the existing one or a new one with quantity 0
+                    const split = item.splits.find(s => s.memberId === member.id) ?? {
+                      memberId: member.id,
+                      quantity: 0
+                    };
+
+                    return (
+                      <div key={member.id} className="flex items-center gap-2 bg-gray-700/20 p-2 rounded-lg">
+                        <div className={`w-8 h-8 rounded-full ${member.color} flex items-center justify-center`}>
+                          {member.name[0].toUpperCase()}
+                        </div>
+                        <span className="flex-grow text-sm sm:text-base">{member.name}</span>
+                        <input
+                          type="number"
+                          value={split.quantity}  // Now quantity is guaranteed to exist
+                          onChange={(e) => updateItemSplit(item.id, member.id, Number(e.target.value))}
+                          className="w-16 sm:w-20 bg-gray-700/50 rounded-lg px-2 sm:px-3 py-1 text-sm sm:text-base"
+                          placeholder="0"
+                          min="0"
+                          max={Number(item.sharedQty) > 1 ? item.sharedQty : item.qty}
+                          step="1"
+                          onWheel={(e) => {
+                            (e.target as HTMLInputElement).blur();
+                          }}
+                        />
                       </div>
-                      <span className="flex-grow text-sm sm:text-base">{member.name}</span>
-                      <input
-                        type="number"
-                        value={split?.quantity || 0}  // Use optional chaining and default to 0
-                        onChange={(e) => updateItemSplit(item.id, member.id, Number(e.target.value))}
-                        className="w-16 sm:w-20 bg-gray-700/50 rounded-lg px-2 sm:px-3 py-1 text-sm sm:text-base"
-                        placeholder="0"
-                        min="0"
-                        max={Number(item.sharedQty) > 1 ? item.sharedQty : item.qty}
-                        step="1"
-                        onWheel={(e) => e.target.blur()}
-                      />
-                    </div>
-                  );
-                })}
+                    );
+                  })}
                 </div>
 
                 {/* Safe Share PopUp */}
@@ -641,27 +665,28 @@ const BillCalculator = () => {
                       <div className="bg-gray-800 p-4 sm:p-6 rounded-xl w-full max-w-sm sm:w-96 space-y-4">
                         <h3 className="text-lg font-semibold">Share {item.name}</h3>
                         <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm text-gray-400 mb-1">Number of people sharing:</label>
-                            <input
-                              type="number"
-                              min="1"
-                              max={20}
-                              value={tempSharedQty}
-                              onChange={(e) => {
-                                const inputValue = parseInt(e.target.value) || 1;
-                                setTempSharedQty(Math.min(Math.max(1, inputValue), 20));
-                              }}
-                              className="w-full bg-gray-700/50 rounded-lg px-3 py-2"
-                              onWheel={(e) => e.target.blur()}
-                              onKeyDown={(e) => {
-                                if (e.key === '-' || e.key === 'e' || e.key === '.') {
-                                  e.preventDefault();
-                                }
-                              }}
-                            />
-                          </div>
-
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">Number of people sharing:</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max={20}
+                            value={tempSharedQty}
+                            onChange={(e) => {
+                              const inputValue = parseInt(e.target.value) || 1;
+                              setTempSharedQty(Math.min(Math.max(1, inputValue), 20));
+                            }}
+                            className="w-full bg-gray-700/50 rounded-lg px-3 py-2"
+                            onWheel={(e) => {
+                              (e.target as HTMLInputElement).blur();
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === '-' || e.key === 'e' || e.key === '.') {
+                                e.preventDefault();
+                              }
+                            }}
+                          />
+                        </div>
                           <div className="text-sm bg-gray-700/20 p-3 rounded-lg space-y-2">
                             <div className="flex justify-between">
                               <span>Total item price:</span>
@@ -805,18 +830,18 @@ const BillCalculator = () => {
               className="w-20 sm:w-24 bg-gray-700/50 rounded-lg px-2 py-2 text-sm sm:text-base"
             />
             <div className="flex bg-gray-700/50 rounded-lg p-1">
-              <button
-                onClick={() => setNewFee({ ...newFee, type: 'percentage' })}
-                className={`w-8 h-8 rounded flex items-center justify-center ${newFee.type === 'percentage' ? 'bg-blue-600' : ''}`}
-              >
-                <Percent size={16} />
-              </button>
-              <button
-                onClick={() => setNewFee({ ...newFee, type: 'amount' })}
-                className={`w-8 h-8 rounded flex items-center justify-center ${newFee.type === 'amount' ? 'bg-blue-600' : ''}`}
-              >
-                <DollarSign size={16} />
-              </button>
+            <button
+              onClick={() => setNewFee({ ...newFee, type: 'percentage' })}
+              className={`w-8 h-8 rounded flex items-center justify-center ${newFee.type === 'percentage' ? 'bg-blue-600' : ''}`}
+            >
+              <Percent size={16} />
+            </button>
+            <button
+              onClick={() => setNewFee({ ...newFee, type: 'amount' })}
+              className={`w-8 h-8 rounded flex items-center justify-center ${newFee.type === 'amount' ? 'bg-blue-600' : ''}`}
+            >
+              <DollarSign size={16} />
+            </button>
             </div>
             <button
               onClick={addFee}
