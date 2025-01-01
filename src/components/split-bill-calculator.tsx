@@ -1018,6 +1018,12 @@ const BillCalculator = () => {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="mt-4 text-center text-gray-400 text-sm">
+        <p>Version 1.0.0</p>
+        <p>Created by Michael Yubileum</p>
+      </footer>
     </div>
   );
 };
