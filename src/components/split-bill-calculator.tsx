@@ -14,7 +14,6 @@ import {
   Split,
   Tag
 } from 'lucide-react';
-import { Users } from 'lucide-react';
 
 type Currency = {
   code: string;
