@@ -10,9 +10,9 @@ import {
   DollarSign, 
   //Users, 
   UserPlus,
-  //MoreVertical,
-  Split
-  //Tag
+  MoreVertical,
+  Split,
+  Tag
 } from 'lucide-react';
 
 type Currency = {
@@ -75,7 +75,7 @@ const BillCalculator = () => {
     type: 'percentage' as const 
   });
   const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState(false);
-  //const [itemMenuOpen, setItemMenuOpen] = useState<number | null>(null);
+  const [itemMenuOpen, setItemMenuOpen] = useState<number | null>(null);
   const [activePopup, setActivePopup] = useState<PopupState>({ itemId: null, type: null });
   const [tempSharedQty, setTempSharedQty] = useState(1);
   const [tempDiscount, setTempDiscount] = useState<Discount>({ type: 'percentage', value: 0 });
@@ -165,46 +165,48 @@ const BillCalculator = () => {
   const updateItem = (id: number, field: keyof Item, value: string | number): void => {
     setItems(items.map(item => {
       if (item.id === id) {
+        const maxQty = field === 'qty' && item.sharedQty > 1 ? item.sharedQty : Infinity;
         const updatedItem = {
           ...item,
-          [field]: field === 'price' || field === 'qty' ? Math.max(parseFloat(value.toString()) || 0, 0) : value
+          [field]: field === 'price' || field === 'qty'
+            ? Math.max(1, Math.min(parseFloat(value.toString()) || 0, maxQty))
+            : value,
         };
         return updatedItem;
       }
       return item;
     }));
-  };
+  };  
 
   const updateItemSplit = (itemId: number, memberId: number, quantity: number): void => {
     setItems(items.map(item => {
       if (item.id === itemId) {
-        const parsedQuantity = Math.max(0, Math.floor(Number(quantity) || 0));
+        const parsedQuantity = Math.max(0, Math.floor(Number(quantity) || 0)); // Nilai baru untuk split
         const currentSplit = item.splits.find(s => s.memberId === memberId);
-        const otherSplitsTotal = item.splits.reduce((sum, s) => 
-          s.memberId === memberId ? sum : sum + s.quantity, 0
-        );
-        
-        const maxAllowedQuantity = Number(item.sharedQty) > 1 
-          ? Math.max(0, Number(item.sharedQty) - otherSplitsTotal)
-          : Math.max(0, Number(item.qty) - otherSplitsTotal);
+        const otherSplitsTotal = item.splits
+          .filter(s => s.memberId !== memberId)
+          .reduce((sum, s) => sum + s.quantity, 0);
   
+        // Tentukan batas maksimum berdasarkan sharedQty atau qty
+        const maxAllowedQuantity = item.sharedQty > 1
+          ? item.sharedQty - otherSplitsTotal
+          : item.qty - otherSplitsTotal;
+  
+        // Validasi nilai quantity
         const newQuantity = Math.min(parsedQuantity, maxAllowedQuantity);
   
-        // Create new splits array
-        let newSplits: Split[];
-        if (currentSplit) {
-          newSplits = item.splits.map(s => 
-            s.memberId === memberId ? { ...s, quantity: newQuantity } : s
-          );
-        } else {
-          newSplits = [...item.splits, { memberId, quantity: newQuantity }];
-        }
+        // Perbarui splits array
+        const newSplits = currentSplit
+          ? item.splits.map(s =>
+              s.memberId === memberId ? { ...s, quantity: newQuantity } : s
+            )
+          : [...item.splits, { memberId, quantity: newQuantity }];
   
-        return { ...item, splits: newSplits };
+        return { ...item, splits: newSplits }; // Hanya memperbarui splits
       }
       return item;
     }));
-  };
+  };  
 
   const updateItemSharedQty = (itemId: number): void => {
     const item = items.find(i => i.id === itemId);
@@ -230,11 +232,11 @@ const BillCalculator = () => {
     setActivePopup({ itemId: null, type: null });
   };
 
-  // const handleShareClick = (item: Item): void => {
-  //   setTempSharedQty(item.sharedQty || 1);
-  //   setActivePopup({ itemId: item.id, type: 'share' });
-  //   setItemMenuOpen(null);
-  // };
+  const handleShareClick = (item: Item): void => {
+    setTempSharedQty(item.sharedQty || 1);
+    setActivePopup({ itemId: item.id, type: 'share' });
+    setItemMenuOpen(null);
+  };
 
   const updateItemDiscount = (itemId: number): void => {
     setItems(items.map(item => 
@@ -415,10 +417,9 @@ const BillCalculator = () => {
       if (!event.target.closest('.currency-dropdown')) {
         setIsCurrencyDropdownOpen(false);
       }
-      // Remove the following lines
-      // if (!event.target.closest('.item-menu') && !event.target.closest('.item-menu-trigger')) {
-      //   setItemMenuOpen(null);
-      // }
+      if (!event.target.closest('.item-menu') && !event.target.closest('.item-menu-trigger')) {
+        setItemMenuOpen(null);
+      }
     };
   
     document.addEventListener('mousedown', handleClickOutside);
@@ -537,13 +538,20 @@ const BillCalculator = () => {
                     className="flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm min-w-0"
                   />
 
-                  {/* Quantity with Smaller Increment/Decrement Buttons */}
+                  {/* Quantity with Increment/Decrement Buttons */}
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => updateItem(item.id, 'qty', Math.max(1, item.qty - 1))}
-                      className="w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onClick={() => {
+                        if (item.qty > 1) {
+                          updateItem(item.id, 'qty', item.qty - 1);
+                        }
+                      }}
+                      className={`w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        item.qty <= 1 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                       aria-label="Decrease Quantity"
+                      disabled={item.qty <= 1}
                     >
                       -
                     </button>
@@ -551,14 +559,29 @@ const BillCalculator = () => {
                       type="number"
                       value={item.qty}
                       min="1"
-                      onChange={(e) => updateItem(item.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                      max={Number(item.sharedQty) || 1} // Sesuaikan dengan maxValue
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        const parsedValue = parseInt(inputValue, 10);
+                        if (inputValue === '') {
+                          updateItem(item.id, 'qty', 0); // Tetapkan nilai sementara kosong
+                        } else {
+                          updateItem(item.id, 'qty', Math.min(parsedValue, item.sharedQty || parsedValue));
+                        }
+                      }}
                       className="w-12 text-center bg-gray-700/50 text-sm px-1 py-1 rounded-md"
                     />
                     <button
                       type="button"
-                      onClick={() => updateItem(item.id, 'qty', item.qty + 1)}
-                      className="w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onClick={() => {
+                        const maxQty = item.sharedQty > 1 ? item.sharedQty : item.qty + 1;
+                        updateItem(item.id, 'qty', Math.min(item.qty + 1, maxQty));
+                      }}
+                      className={`w-6 h-6 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        item.qty >= (item.sharedQty > 1 ? item.sharedQty : Infinity) ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                       aria-label="Increase Quantity"
+                      disabled={item.qty >= (item.sharedQty > 1 ? item.sharedQty : Infinity)}
                     >
                       +
                     </button>
@@ -574,14 +597,53 @@ const BillCalculator = () => {
                     className="w-20 flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm"
                   />
 
-                  {/* Remove Item Button */}
+                  {/* Trash Button */}
                   <button
                     onClick={() => removeItem(item.id)}
                     className="p-2 text-red-400 hover:text-red-300"
+                    aria-label="Delete Item"
                   >
                     <Trash2 size={16} />
                   </button>
+
+                  {/* Three Dots Menu */}
+                  <div className="relative item-menu">
+                    <button
+                      onClick={() => setItemMenuOpen(itemMenuOpen === item.id ? null : item.id)}
+                      className="p-2 text-gray-400 hover:text-gray-300 item-menu-trigger"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+
+                    {/* Dropdown Menu (optional) */}
+                    {itemMenuOpen === item.id && (
+                    <div className="absolute right-0 mt-2 w-48 py-2 bg-gray-800 rounded-lg shadow-xl z-10">
+                      <button
+                        className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                        onClick={() => handleShareClick(item)}
+                      >
+                        <Split size={16} /> {/* Icon for Share */}
+                        Share Item
+                      </button>
+                      <button
+                        className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                        onClick={() => {
+                          setTempDiscount({
+                            type: item.discount?.type || 'percentage',
+                            value: item.discount?.value || 0
+                          });
+                          setActivePopup({ itemId: item.id, type: 'discount' });
+                          setItemMenuOpen(null);
+                        }}
+                      >
+                        <Tag size={16} /> {/* Icon for Discount */}
+                        Add Discount
+                      </button>
+                    </div>
+                  )}
+                  </div>
                 </div>
+
 
                 {/* Display shared quantity and discount if applied */}
                 {(Number(item.sharedQty) > 1 || Number(item.discount?.value) > 0) && (
@@ -648,19 +710,21 @@ const BillCalculator = () => {
                             type="number"
                             value={split.quantity}
                             min="0"
-                            max={Number(item.sharedQty) > 1 ? item.sharedQty : item.qty}
-                            onChange={(e) =>
-                              updateItemSplit(item.id, member.id, Math.max(0, parseInt(e.target.value) || 0))
-                            }
+                            max={item.sharedQty > 1 ? item.sharedQty : item.qty}
+                            onChange={(e) => {
+                              const parsedValue = Math.max(0, parseInt(e.target.value) || 0);
+                              updateItemSplit(item.id, member.id, Math.min(parsedValue, item.sharedQty > 1 ? item.sharedQty : item.qty));
+                            }}
                             className="w-10 text-center bg-gray-700/50 text-xs px-1 py-1 rounded-md"
                           />
                           <button
                             type="button"
-                            onClick={() =>
-                              updateItemSplit(item.id, member.id, Math.min(Number(item.qty), split.quantity + 1))
-                            }
-                            className="w-5 h-5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            aria-label="Increase Quantity"
+                            onClick={() => {
+                              const maxQty = item.sharedQty > 1 ? item.sharedQty : item.qty;
+                              updateItemSplit(item.id, member.id, Math.min(split.quantity + 1, maxQty));
+                            }}
+                            className={`w-5 h-5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                            aria-label="Increase Individual Quantity"
                           >
                             +
                           </button>
@@ -821,15 +885,20 @@ const BillCalculator = () => {
                         </div>
                         <input
                           type="number"
+                          value={tempDiscount.value === 0 ? "" : tempDiscount.value} // Izinkan nilai kosong
+                          onChange={(e) => {
+                            const inputValue = e.target.value;
+                            if (inputValue === "") {
+                              setTempDiscount({ ...tempDiscount, value: 0 }); // Tetapkan nilai 0 saat kosong
+                            } else {
+                              const parsedValue = parseFloat(inputValue) || 0;
+                              setTempDiscount({ ...tempDiscount, value: Math.max(0, parsedValue) });
+                            }
+                          }}
                           min="0"
-                          max={tempDiscount.type === 'percentage' ? 100 : undefined}
-                          value={tempDiscount.value}
-                          onChange={(e) => setTempDiscount({ 
-                            ...tempDiscount, 
-                            value: Math.max(0, tempDiscount.type === 'percentage' ? Math.min(100, parseFloat(e.target.value) || 0) : parseFloat(e.target.value) || 0)
-                          })}
                           className="w-full bg-gray-700/50 rounded-lg px-3 py-2"
                           placeholder={tempDiscount.type === 'percentage' ? 'Percentage' : 'Amount'}
+                          onWheel={(e) => e.preventDefault()} // Mencegah scroll mengubah nilai
                         />
                       </div>
                       <div className="flex justify-end gap-2">
