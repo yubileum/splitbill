@@ -10,9 +10,9 @@ import {
   DollarSign, 
   //Users, 
   UserPlus,
-  MoreVertical,
-  Split,
-  Tag
+  //MoreVertical,
+  Split
+  //Tag
 } from 'lucide-react';
 
 type Currency = {
@@ -75,7 +75,7 @@ const BillCalculator = () => {
     type: 'percentage' as const 
   });
   const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState(false);
-  const [itemMenuOpen, setItemMenuOpen] = useState<number | null>(null);
+  //const [itemMenuOpen, setItemMenuOpen] = useState<number | null>(null);
   const [activePopup, setActivePopup] = useState<PopupState>({ itemId: null, type: null });
   const [tempSharedQty, setTempSharedQty] = useState(1);
   const [tempDiscount, setTempDiscount] = useState<Discount>({ type: 'percentage', value: 0 });
@@ -230,11 +230,11 @@ const BillCalculator = () => {
     setActivePopup({ itemId: null, type: null });
   };
 
-  const handleShareClick = (item: Item): void => {
-    setTempSharedQty(item.sharedQty || 1);
-    setActivePopup({ itemId: item.id, type: 'share' });
-    setItemMenuOpen(null);
-  };
+  // const handleShareClick = (item: Item): void => {
+  //   setTempSharedQty(item.sharedQty || 1);
+  //   setActivePopup({ itemId: item.id, type: 'share' });
+  //   setItemMenuOpen(null);
+  // };
 
   const updateItemDiscount = (itemId: number): void => {
     setItems(items.map(item => 
@@ -415,9 +415,10 @@ const BillCalculator = () => {
       if (!event.target.closest('.currency-dropdown')) {
         setIsCurrencyDropdownOpen(false);
       }
-      if (!event.target.closest('.item-menu') && !event.target.closest('.item-menu-trigger')) {
-        setItemMenuOpen(null);
-      }
+      // Remove the following lines
+      // if (!event.target.closest('.item-menu') && !event.target.closest('.item-menu-trigger')) {
+      //   setItemMenuOpen(null);
+      // }
     };
   
     document.addEventListener('mousedown', handleClickOutside);
