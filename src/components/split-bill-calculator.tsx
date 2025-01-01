@@ -52,6 +52,11 @@ type Fee = {
   type: 'percentage' | 'amount';
 };
 
+type PopupState = {
+  itemId: number | null;
+  type: string | null;
+};
+
 const BillCalculator = () => {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>({ 
     code: 'IDR', 
@@ -64,8 +69,8 @@ const BillCalculator = () => {
   const [newMemberName, setNewMemberName] = useState('');
   const [newFee, setNewFee] = useState({ name: '', value: '', type: 'percentage' });
   const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState(false);
-  const [itemMenuOpen, setItemMenuOpen] = useState(null);
-  const [activePopup, setActivePopup] = useState({ itemId: null, type: null });
+  const [itemMenuOpen, setItemMenuOpen] = useState<number | null>(null);
+  const [activePopup, setActivePopup] = useState<PopupState>({ itemId: null, type: null });
   const [tempSharedQty, setTempSharedQty] = useState(1);
   const [tempDiscount, setTempDiscount] = useState({ type: 'percentage', value: 0 });
   const lastItemRef = useRef<HTMLDivElement>(null);
@@ -163,7 +168,7 @@ const BillCalculator = () => {
     }));
   };
 
-  const updateItemSplit = (itemId, memberId, quantity) => {
+  const updateItemSplit = (itemId: number, memberId: number, quantity: number): void => {
     setItems(items.map(item => {
       if (item.id === itemId) {
         // Ensure we're working with valid numbers
@@ -190,7 +195,7 @@ const BillCalculator = () => {
     }));
   };
 
-  const updateItemSharedQty = (itemId) => {
+  const updateItemSharedQty = (itemId: number): void => {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
   
@@ -214,13 +219,13 @@ const BillCalculator = () => {
     setActivePopup({ itemId: null, type: null });
   };
 
-  const handleShareClick = (item) => {
+  const handleShareClick = (item: Item): void => {
     setTempSharedQty(item.sharedQty || 1);
     setActivePopup({ itemId: item.id, type: 'share' });
     setItemMenuOpen(null);
   };
 
-  const updateItemDiscount = (itemId) => {
+  const updateItemDiscount = (itemId: number): void => {
     setItems(items.map(item => 
       item.id === itemId
         ? { ...item, discount: { ...tempDiscount } }
@@ -229,7 +234,7 @@ const BillCalculator = () => {
     setActivePopup({ itemId: null, type: null });
   };
 
-  const removeItem = (id) => {
+  const removeItem = (id: number): void => {
     setItems(items.filter(item => item.id !== id));
   };
 
@@ -259,7 +264,7 @@ const BillCalculator = () => {
     return priceAfterDiscount;
   };
   
-  const calculateItemDiscountAmount = (item) => {
+  const calculateItemDiscountAmount = (item: Item): number => {
     if (!item || !item.discount?.value) return 0;
   
     const basePrice = Number(item.price) || 0;
@@ -272,7 +277,7 @@ const BillCalculator = () => {
     return discountValue;
   };
   
-  const calculateSubtotal = () => {
+  const calculateSubtotal = (): number => {
     return items.reduce((sum, item) => {
       const totalQuantity = (item.splits || []).reduce((splitSum, split) => 
         splitSum + (Number(split.quantity) || 0), 0
@@ -291,7 +296,7 @@ const BillCalculator = () => {
     }, 0);
   };
 
-  const calculateTotal = () => {
+  const calculateTotal = (): number => {
     const subtotal = calculateSubtotal();
     
     // Calculate total discounts
@@ -310,7 +315,7 @@ const BillCalculator = () => {
     return totalWithFees;
   };
 
-  const calculateMemberShare = (memberId) => {
+  const calculateMemberShare = (memberId: number): number => {
     let memberSubtotal = 0;
     const totalSubtotal = calculateSubtotal();
   
@@ -382,7 +387,8 @@ const BillCalculator = () => {
   };
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (!event.target || !(event.target instanceof Element)) return;
       if (!event.target.closest('.currency-dropdown')) {
         setIsCurrencyDropdownOpen(false);
       }
@@ -390,7 +396,7 @@ const BillCalculator = () => {
         setItemMenuOpen(null);
       }
     };
-
+  
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
