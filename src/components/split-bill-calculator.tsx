@@ -8,12 +8,13 @@ import {
   ChevronDown, 
   Percent, 
   DollarSign, 
-  Users, 
+  //Users, 
   UserPlus,
   MoreVertical,
   Split,
   Tag
 } from 'lucide-react';
+import { Users } from 'lucide-react';
 
 type Currency = {
   code: string;
@@ -233,11 +234,12 @@ const BillCalculator = () => {
     setItems(items.filter(item => item.id !== id));
   };
 
-  const calculateOriginalItemTotal = (item) => {
-    if (!item) return 0;
-    const splitTotal = (item.splits || []).reduce((sum, split) => sum + (Number(split.quantity) || 0), 0);
-    return splitTotal * (Number(item.price) || 0);
-  };
+  //Not Yet Used
+  // const calculateOriginalItemTotal = (item) => {
+  //   if (!item) return 0;
+  //   const splitTotal = (item.splits || []).reduce((sum, split) => sum + (Number(split.quantity) || 0), 0);
+  //   return splitTotal * (Number(item.price) || 0);
+  // };
 
   const calculateItemPrice = (item: Item): number => {
     if (!item) return 0;
