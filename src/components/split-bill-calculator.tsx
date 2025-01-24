@@ -2,9 +2,9 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { 
-  PlusCircle, 
-  Trash2, 
-  Globe, 
+  PlusCircle,
+  Trash2,
+  Globe,
   ChevronDown, 
   Percent, 
   DollarSign, 
@@ -12,7 +12,9 @@ import {
   UserPlus,
   MoreVertical,
   Split,
-  Tag
+  Tag,
+  CircleDollarSign, 
+  CircleDot    
 } from 'lucide-react';
 
 type Currency = {
@@ -30,11 +32,12 @@ type Member = {
 type Item = {
   id: number;
   name: string;
-  price: number;
+  price: string;
   qty: number;
   sharedQty: number;
   splits: Split[];
-  discount: Discount;  // Make discount required, not optional
+  discount: Discount;
+  isPriceTotal: boolean;  
 };
 
 type Split = {
@@ -118,6 +121,24 @@ const BillCalculator = () => {
       : `${selectedCurrency.symbol}${amount.toFixed(2)}`;
   };
 
+  // const togglePriceMode = (itemId: number): void => {
+  //   setItems(items.map(item => {
+  //     if (item.id === itemId) {
+  //       const newIsPriceTotal = !item.isPriceTotal;
+  //       // Convert the price when toggling
+  //       const newPrice = newIsPriceTotal 
+  //         ? item.price * item.qty  // Convert to total
+  //         : item.price / item.qty; // Convert to per item
+  //       return {
+  //         ...item,
+  //         isPriceTotal: newIsPriceTotal,
+  //         price: newPrice
+  //       };
+  //     }
+  //     return item;
+  //   }));
+  // };
+
   const addMember = (): void => {
     if (newMemberName.trim()) {
       setMembers([...members, {
@@ -144,11 +165,12 @@ const BillCalculator = () => {
       {
         id: newItemId,
         name: '',
-        price: 0,
+        price: '',  // Initialize as empty string
         qty: 1,
         sharedQty: 1,
         splits: [] as Split[],
-        discount: { type: 'percentage', value: 0 }
+        discount: { type: 'percentage', value: 0 },
+        isPriceTotal: true
       }
     ]);
   
@@ -260,16 +282,23 @@ const BillCalculator = () => {
 
   const calculateItemPrice = (item: Item): number => {
     if (!item) return 0;
-    const basePrice = Number(item.price) || 0;
-    const discount = Number(item.discount?.value) || 0;
+    let basePrice = parseFloat(item.price) || 0;
     
+    // If price is per item and qty > 1, adjust for total price
+    if (!item.isPriceTotal) {
+      basePrice = basePrice * item.qty;
+    }
+    
+    const discount = Number(item.discount?.value) || 0;
     let priceAfterDiscount = basePrice;
+    
+    // Apply discount
     if (item.discount?.type === 'percentage') {
       priceAfterDiscount = basePrice * (1 - Math.min(100, Math.max(0, discount)) / 100);
     } else {
       priceAfterDiscount = Math.max(0, basePrice - discount);
     }
-  
+
     if (Number(item.sharedQty) > 1) {
       return priceAfterDiscount / item.sharedQty;
     }
@@ -279,11 +308,16 @@ const BillCalculator = () => {
   
   const calculateItemDiscountAmount = (item: Item): number => {
     if (!item || !item.discount?.value) return 0;
-  
-    const basePrice = Number(item.price) || 0;
+
+    let basePrice = parseFloat(item.price) || 0;
+    
+    // If price is per item, calculate total price first
+    if (!item.isPriceTotal) {
+      basePrice = basePrice * item.qty;
+    }
+    
     const discountValue = Number(item.discount.value) || 0;
-  
-    // Calculate total discount (not per quantity)
+
     if (item.discount.type === 'percentage') {
       return basePrice * (discountValue / 100);
     }
@@ -292,20 +326,20 @@ const BillCalculator = () => {
   
   const calculateSubtotal = (): number => {
     return items.reduce((sum, item) => {
-      const totalQuantity = (item.splits || []).reduce((splitSum, split) => 
-        splitSum + (Number(split.quantity) || 0), 0
-      );
+      let itemPrice = parseFloat(item.price) || 0;
       
-      if (Number(item.sharedQty) > 1) {
-        // For shared items
-        const basePrice = Number(item.price) || 0;
-        const pricePerShare = basePrice / item.sharedQty;
-        return sum + (pricePerShare * totalQuantity);
-      } else {
-        // For non-shared items
-        const basePrice = Number(item.price) || 0;
-        return sum + (basePrice * totalQuantity);
+      // If it's per item price, multiply by quantity
+      if (!item.isPriceTotal) {
+        itemPrice = itemPrice * item.qty;
       }
+      
+      // For shared items
+      if (Number(item.sharedQty) > 1) {
+        return sum + itemPrice;
+      }
+      
+      // For regular items
+      return sum + itemPrice;
     }, 0);
   };
 
@@ -331,66 +365,66 @@ const BillCalculator = () => {
   const calculateMemberShare = (memberId: number): number => {
     let memberSubtotal = 0;
     const totalSubtotal = calculateSubtotal();
-  
-    // Calculate member's share of items
+
     items.forEach(item => {
-      // Create a definite split object
+      let itemPrice = parseFloat(item.price) || 0;
+
       const split = item.splits.find(s => s.memberId === memberId) ?? { 
         memberId: memberId, 
         quantity: 0 
       };
 
-      // Now we can safely check the quantity
       if (split.quantity > 0) {
+        let itemPrice = Number(item.price) || 0;
+        
+        // Calculate base price based on isPriceTotal flag
+        if (!item.isPriceTotal) {
+          itemPrice = itemPrice * item.qty;
+        }
+
+        // Apply discount before splitting
+        const discount = Number(item.discount?.value) || 0;
+        let priceAfterDiscount = itemPrice;
+        
+        if (item.discount?.type === 'percentage') {
+          priceAfterDiscount = itemPrice * (1 - Math.min(100, Math.max(0, discount)) / 100);
+        } else {
+          priceAfterDiscount = Math.max(0, itemPrice - discount);
+        }
+
+        // Calculate member's share based on their split quantity
         if (Number(item.sharedQty) > 1) {
-          // For shared items
-          const basePrice = Number(item.price) || 0;
-          const discount = Number(item.discount?.value) || 0;
-          let priceAfterDiscount = basePrice;
-  
-          // Apply discount to total price first
-          if (item.discount?.type === 'percentage') {
-            priceAfterDiscount = basePrice * (1 - Math.min(100, Math.max(0, discount)) / 100);
-          } else {
-            priceAfterDiscount = Math.max(0, basePrice - discount);
-          }
-  
-          // Then divide by shares and multiply by quantity
+          // For shared items, use the share quantity
           const pricePerShare = priceAfterDiscount / item.sharedQty;
           memberSubtotal += pricePerShare * split.quantity;
         } else {
-          // For non-shared items
-          const basePrice = Number(item.price) || 0;
-          const discount = Number(item.discount?.value) || 0;
-          let priceAfterDiscount = basePrice;
-  
-          // Apply discount to total price
-          if (item.discount?.type === 'percentage') {
-            priceAfterDiscount = basePrice * (1 - Math.min(100, Math.max(0, discount)) / 100);
-          } else {
-            priceAfterDiscount = Math.max(0, basePrice - discount);
+          // For non-shared items, calculate proportion based on quantity
+          const totalItemSplits = item.splits.reduce((sum, s) => sum + s.quantity, 0);
+          if (totalItemSplits > 0) {
+            memberSubtotal += (priceAfterDiscount * split.quantity) / totalItemSplits;
           }
-  
-          memberSubtotal += priceAfterDiscount * split.quantity;
         }
       }
     });
 
+    // Apply additional fees
     let totalAfterFees = memberSubtotal;
-  
-    // Calculate additional fees (rest of the code remains the same)
-    if (memberSubtotal > 0 && totalSubtotal > 0) {
+    const subtotalAfterDiscounts = calculateSubtotal() - items.reduce((sum, item) => 
+      sum + calculateItemDiscountAmount(item), 0
+    );
+
+    if (memberSubtotal > 0 && subtotalAfterDiscounts > 0) {
       additionalFees.forEach(fee => {
         const feeValue = parseFloat(fee.value) || 0;
         if (fee.type === 'percentage') {
-          const memberProportion = memberSubtotal / totalSubtotal;
-          totalAfterFees += (totalSubtotal * (feeValue / 100)) * memberProportion;
+          const memberProportion = memberSubtotal / subtotalAfterDiscounts;
+          totalAfterFees += (subtotalAfterDiscounts * (feeValue / 100)) * memberProportion;
         } else {
           totalAfterFees += feeValue / members.length;
         }
       });
     }
-  
+
     return totalAfterFees;
   };
 
@@ -561,17 +595,17 @@ const BillCalculator = () => {
                         type="number"
                         value={item.qty}
                         min="1"
-                        max={Number(item.sharedQty) || 1} // Sesuaikan dengan maxValue
+                        max={Number(item.sharedQty) || 1}
                         onChange={(e) => {
                           const inputValue = e.target.value;
                           const parsedValue = parseInt(inputValue, 10);
                           if (inputValue === '') {
-                            updateItem(item.id, 'qty', 0); // Tetapkan nilai sementara kosong
+                            updateItem(item.id, 'qty', 0);
                           } else {
                             updateItem(item.id, 'qty', Math.min(parsedValue, item.sharedQty || parsedValue));
                           }
                         }}
-                        className="w-12 text-center bg-gray-700/50 text-sm px-1 py-1 rounded-md"
+                        className="w-12 text-center bg-gray-700/50 text-sm px-1 py-1 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <button
                         type="button"
@@ -592,60 +626,87 @@ const BillCalculator = () => {
 
                   {/* Row 2: Price, Delete & Three Dots */}
                   <div className="flex gap-2 items-center">
-                    {/* Price Field */}
+                    {/* Price Field with Toggle */}
+                    <div className="flex-1 relative">
                     <input
                       type="number"
                       placeholder="Price"
-                      value={item.price || ''}
+                      value={item.price}
                       onChange={(e) => updateItem(item.id, 'price', e.target.value)}
                       min="0"
-                      className="flex-1 bg-gray-700/50 rounded-lg px-2 py-2 text-sm min-w-[120px]"
+                      className="w-full bg-gray-700/50 rounded-lg px-2 py-2 pr-28 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-
-                    {/* Trash Button */}
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="p-2 text-red-400 hover:text-red-300"
-                      aria-label="Delete Item"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-
-                    {/* Three Dots Menu */}
-                    <div className="relative item-menu">
-                      <button
-                        onClick={() => setItemMenuOpen(itemMenuOpen === item.id ? null : item.id)}
-                        className="p-2 text-gray-400 hover:text-gray-300 item-menu-trigger"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
-
-                      {/* Dropdown Menu (optional) */}
-                      {itemMenuOpen === item.id && (
-                      <div className="absolute right-0 mt-2 w-48 py-2 bg-gray-800 rounded-lg shadow-xl z-10">
+                      <div className="absolute right-0 top-0 h-full flex items-center">
                         <button
-                          className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
-                          onClick={() => handleShareClick(item)}
+                          onClick={() => setItems(items.map(i => 
+                            i.id === item.id ? {...i, isPriceTotal: !i.isPriceTotal} : i
+                          ))}
+                          disabled={item.qty <= 1}
+                          className={`px-2 h-full flex items-center gap-1 ${
+                            item.qty <= 1 
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:text-blue-400'
+                          }`}
+                          title={item.isPriceTotal ? "Total Price" : "Per Item Price"}
                         >
-                          <Split size={16} /> {/* Icon for Share */}
-                          Share Item
-                        </button>
-                        <button
-                          className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
-                          onClick={() => {
-                            setTempDiscount({
-                              type: item.discount?.type || 'percentage',
-                              value: item.discount?.value || 0
-                            });
-                            setActivePopup({ itemId: item.id, type: 'discount' });
-                            setItemMenuOpen(null);
-                          }}
-                        >
-                          <Tag size={16} /> {/* Icon for Discount */}
-                          Add Discount
+                          {item.isPriceTotal ? (
+                            <>
+                              <span className="text-xs text-gray-400">price in total</span>
+                              <CircleDollarSign size={14} className="text-blue-400" />
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-xs text-gray-400">price per item</span>
+                              <CircleDot size={14} className="text-gray-400" />
+                            </>
+                          )}
                         </button>
                       </div>
-                    )}
+                    </div>
+
+                    {/* Action Buttons Container */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => removeItem(item.id)}
+                        className="p-1.5 text-red-400 hover:text-red-300 hover:bg-gray-700/50 rounded-lg"
+                        aria-label="Delete Item"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+
+                      <div className="relative item-menu">
+                        <button
+                          onClick={() => setItemMenuOpen(itemMenuOpen === item.id ? null : item.id)}
+                          className="p-1.5 text-gray-400 hover:text-gray-300 hover:bg-gray-700/50 rounded-lg item-menu-trigger"
+                        >
+                          <MoreVertical size={14} />
+                        </button>
+                        {itemMenuOpen === item.id && (
+                          <div className="absolute right-0 mt-2 w-48 py-2 bg-gray-800 rounded-lg shadow-xl z-10">
+                            <button
+                              className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                              onClick={() => handleShareClick(item)}
+                            >
+                              <Split size={14} />
+                              Share Item
+                            </button>
+                            <button
+                              className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                              onClick={() => {
+                                setTempDiscount({
+                                  type: item.discount?.type || 'percentage',
+                                  value: item.discount?.value || 0
+                                });
+                                setActivePopup({ itemId: item.id, type: 'discount' });
+                                setItemMenuOpen(null);
+                              }}
+                            >
+                              <Tag size={14} />
+                              Add Discount
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -689,25 +750,39 @@ const BillCalculator = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {members.map((member) => {
                     const split = item.splits.find((s) => s.memberId === member.id) ?? { memberId: member.id, quantity: 0 };
+                    const isActive = split.quantity > 0;
 
                     return (
-                      <div key={member.id} className="flex items-center gap-2 bg-gray-700/20 p-2 rounded-lg">
-                        {/* Member Initial */}
+                      <div 
+                        key={member.id} 
+                        className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                          isActive 
+                            ? 'bg-gray-700/50 ring-1 ring-blue-500/50' 
+                            : 'bg-gray-700/20'
+                        }`}
+                      >
+                        {/* Member Initial - Keep color consistent */}
                         <div className={`w-6 h-6 rounded-full ${member.color} flex items-center justify-center`}>
                           {member.name[0].toUpperCase()}
                         </div>
 
                         {/* Member Name */}
-                        <span className="flex-grow text-sm">{member.name}</span>
+                        <span className={`flex-grow text-sm ${
+                          isActive ? 'text-white' : 'text-gray-400'
+                        }`}>
+                          {member.name}
+                        </span>
 
-                        {/* Quantity with Increment/Decrement Buttons */}
+                        {/* Quantity Controls */}
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() =>
                               updateItemSplit(item.id, member.id, Math.max(0, split.quantity - 1))
                             }
-                            className="w-5 h-5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className={`w-5 h-5 bg-gray-600 text-white text-xs rounded-md hover:bg-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                              split.quantity === 0 ? 'opacity-50' : ''
+                            }`}
                             aria-label="Decrease Quantity"
                           >
                             -
@@ -721,7 +796,9 @@ const BillCalculator = () => {
                               const parsedValue = Math.max(0, parseInt(e.target.value) || 0);
                               updateItemSplit(item.id, member.id, Math.min(parsedValue, item.sharedQty > 1 ? item.sharedQty : item.qty));
                             }}
-                            className="w-10 text-center bg-gray-700/50 text-xs px-1 py-1 rounded-md"
+                            className={`w-10 text-center bg-gray-700/50 text-xs px-1 py-1 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                              isActive ? 'text-white' : 'text-gray-400'
+                            }`}
                           />
                           <button
                             type="button"
@@ -774,7 +851,7 @@ const BillCalculator = () => {
                                 const inputValue = parseInt(e.target.value) || 1;
                                 setTempSharedQty(Math.min(Math.max(1, inputValue), 20));
                               }}
-                              className="w-16 text-center bg-gray-700/50 text-lg px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-16 text-center bg-gray-700/50 text-lg px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               onWheel={(e) => {
                                 (e.target as HTMLInputElement).blur();
                               }}
@@ -891,20 +968,20 @@ const BillCalculator = () => {
                         </div>
                         <input
                           type="number"
-                          value={tempDiscount.value === 0 ? "" : tempDiscount.value} // Izinkan nilai kosong
+                          value={tempDiscount.value === 0 ? "" : tempDiscount.value}
                           onChange={(e) => {
                             const inputValue = e.target.value;
                             if (inputValue === "") {
-                              setTempDiscount({ ...tempDiscount, value: 0 }); // Tetapkan nilai 0 saat kosong
+                              setTempDiscount({ ...tempDiscount, value: 0 });
                             } else {
                               const parsedValue = parseFloat(inputValue) || 0;
                               setTempDiscount({ ...tempDiscount, value: Math.max(0, parsedValue) });
                             }
                           }}
                           min="0"
-                          className="w-full bg-gray-700/50 rounded-lg px-3 py-2"
+                          className="w-full bg-gray-700/50 rounded-lg px-3 py-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           placeholder={tempDiscount.type === 'percentage' ? 'Percentage' : 'Amount'}
-                          onWheel={(e) => e.preventDefault()} // Mencegah scroll mengubah nilai
+                          onWheel={(e) => e.preventDefault()}
                         />
                       </div>
                       <div className="flex justify-end gap-2">
@@ -946,7 +1023,7 @@ const BillCalculator = () => {
               placeholder="Value"
               value={newFee.value}
               onChange={(e) => setNewFee({ ...newFee, value: e.target.value })}
-              className="w-20 sm:w-24 bg-gray-700/50 rounded-lg px-2 py-2 text-sm sm:text-base"
+              className="w-20 sm:w-24 bg-gray-700/50 rounded-lg px-2 py-2 text-sm sm:text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
             <div className="flex bg-gray-700/50 rounded-lg p-1">
             <button
@@ -995,24 +1072,38 @@ const BillCalculator = () => {
         {/* Summary Section */}
         <div ref={summaryRef} className="bg-gray-800/50 rounded-xl p-4 sm:p-6 space-y-4">
           <h2 className="text-lg sm:text-xl font-semibold">Summary</h2>
-          {/* <div className="space-y-2 border-t border-gray-700 pt-2 mb-4">
-            <h3 className="font-semibold text-sm text-gray-400">Discounts Applied</h3>
-            {items
-              .filter(item => Number(item.discount?.value) > 0)
-              .map(item => {
-                const discountAmount = calculateItemDiscountAmount(item);
-                return discountAmount > 0 ? (
-                  <div key={item.id} className="flex justify-between text-sm text-gray-400">
-                    <span>{item.name || 'Unnamed item'} discount:</span>
-                    <span>-{formatCurrency(discountAmount)}</span>
-                  </div>
-                ) : null;
-              })}
-          </div> */}
           <div className="space-y-2">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span>{formatCurrency(calculateSubtotal())}</span>
+            {/* Detailed Bills */}
+            <div className="space-y-2 mb-4">
+              <h3 className="font-semibold text-sm text-gray-400">Detailed Bills</h3>
+              {items.map(item => {
+                const itemTotal = item.isPriceTotal ? Number(item.price) : Number(item.price) * item.qty;
+                return (
+                  <div key={item.id} className="flex justify-between text-sm text-gray-400">
+                    <div className="flex-1">
+                      <span>{item.name || 'Unnamed item'}</span>
+                      {!item.isPriceTotal && item.qty > 1 && (
+                        <span className="text-gray-500"> × {item.qty}</span>
+                      )}
+                      {item.sharedQty > 1 && (
+                        <span className="text-gray-500"> (shared by {item.sharedQty})</span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      {!item.isPriceTotal && item.qty > 1 && (
+                        <span className="text-gray-500 mr-2">
+                          {formatCurrency(Number(item.price))} each
+                        </span>
+                      )}
+                      <span>{formatCurrency(itemTotal)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="border-t border-gray-700 pt-2 flex justify-between">
+                <span>Subtotal:</span>
+                <span>{formatCurrency(calculateSubtotal())}</span>
+              </div>
             </div>
             {/* Discounts */}
             {items.some(item => Number(item.discount?.value) > 0) && (
