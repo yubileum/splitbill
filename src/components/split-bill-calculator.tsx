@@ -62,6 +62,11 @@ type Discount = {
   value: number;
 };
 
+type OverallDiscount = {
+  value: string;
+  type: 'percentage' | 'amount';
+};
+
 const BillCalculator = () => {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>({ 
     code: 'IDR', 
@@ -86,6 +91,10 @@ const BillCalculator = () => {
   const membersRef = useRef<HTMLDivElement>(null);
   const additionalFeesRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
+  const [overallDiscount, setOverallDiscount] = useState<OverallDiscount>({
+    value: '',
+    type: 'percentage'
+  });
 
   const scrollToElement = (ref: React.RefObject<HTMLDivElement | null>): void => {
     if (ref.current) {
@@ -187,18 +196,36 @@ const BillCalculator = () => {
   const updateItem = (id: number, field: keyof Item, value: string | number): void => {
     setItems(items.map(item => {
       if (item.id === id) {
-        const maxQty = field === 'qty' && item.sharedQty > 1 ? item.sharedQty : Infinity;
-        const updatedItem = {
+        if (field === 'price') {
+          return {
+            ...item,
+            [field]: value.toString() // Keep the string value as is
+          };
+        }
+        
+        if (field === 'qty') {
+          const numValue = parseFloat(value.toString());
+          if (isNaN(numValue) || value === '') {
+            return {
+              ...item,
+              qty: 1
+            };
+          }
+          const maxQty = item.sharedQty > 1 ? item.sharedQty : Infinity;
+          return {
+            ...item,
+            qty: Math.max(1, Math.min(numValue, maxQty))
+          };
+        }
+        
+        return {
           ...item,
-          [field]: field === 'price' || field === 'qty'
-            ? Math.max(1, Math.min(parseFloat(value.toString()) || 0, maxQty))
-            : value,
+          [field]: value
         };
-        return updatedItem;
       }
       return item;
     }));
-  };  
+  };
 
   const updateItemSplit = (itemId: number, memberId: number, quantity: number): void => {
     setItems(items.map(item => {
@@ -323,6 +350,15 @@ const BillCalculator = () => {
     }
     return discountValue;
   };
+
+  const removeItemDiscount = (itemId: number): void => {
+    setItems(items.map(item => 
+      item.id === itemId
+        ? { ...item, discount: { type: 'percentage', value: 0 } }
+        : item
+    ));
+    setActivePopup({ itemId: null, type: null });
+  };
   
   const calculateSubtotal = (): number => {
     return items.reduce((sum, item) => {
@@ -346,43 +382,45 @@ const BillCalculator = () => {
   const calculateTotal = (): number => {
     const subtotal = calculateSubtotal();
     
-    // Calculate total discounts
-    const totalDiscounts = items.reduce((sum, item) => {
+    // Calculate item-level discounts
+    const itemDiscounts = items.reduce((sum, item) => {
       return sum + calculateItemDiscountAmount(item);
     }, 0);
   
-    // Calculate additional fees
+    const subtotalAfterItemDiscounts = subtotal - itemDiscounts;
+    
+    // Calculate overall discount
+    const overallDiscountAmount = calculateOverallDiscountAmount(subtotalAfterItemDiscounts);
+    
+    // Calculate additional fees on amount after all discounts
     const totalWithFees = additionalFees.reduce((total, fee) => {
       const value = parseFloat(fee.value) || 0;
       return fee.type === 'percentage'
-        ? total + ((subtotal - totalDiscounts) * value / 100)
+        ? total + ((subtotalAfterItemDiscounts - overallDiscountAmount) * value / 100)
         : total + value;
-    }, subtotal - totalDiscounts);
+    }, subtotalAfterItemDiscounts - overallDiscountAmount);
   
     return totalWithFees;
   };
 
   const calculateMemberShare = (memberId: number): number => {
     let memberSubtotal = 0;
-    //const totalSubtotal = calculateSubtotal();
-
+  
+    // Calculate member's item totals
     items.forEach(item => {
-      //let itemPrice = parseFloat(item.price) || 0;
-
       const split = item.splits.find(s => s.memberId === memberId) ?? { 
         memberId: memberId, 
         quantity: 0 
       };
-
+  
       if (split.quantity > 0) {
         let itemPrice = Number(item.price) || 0;
         
-        // Calculate base price based on isPriceTotal flag
         if (!item.isPriceTotal) {
           itemPrice = itemPrice * item.qty;
         }
-
-        // Apply discount before splitting
+  
+        // Apply item discount
         const discount = Number(item.discount?.value) || 0;
         let priceAfterDiscount = itemPrice;
         
@@ -391,14 +429,12 @@ const BillCalculator = () => {
         } else {
           priceAfterDiscount = Math.max(0, itemPrice - discount);
         }
-
-        // Calculate member's share based on their split quantity
+  
+        // Calculate member's share
         if (Number(item.sharedQty) > 1) {
-          // For shared items, use the share quantity
           const pricePerShare = priceAfterDiscount / item.sharedQty;
           memberSubtotal += pricePerShare * split.quantity;
         } else {
-          // For non-shared items, calculate proportion based on quantity
           const totalItemSplits = item.splits.reduce((sum, s) => sum + s.quantity, 0);
           if (totalItemSplits > 0) {
             memberSubtotal += (priceAfterDiscount * split.quantity) / totalItemSplits;
@@ -406,26 +442,29 @@ const BillCalculator = () => {
         }
       }
     });
-
-    // Apply additional fees
-    let totalAfterFees = memberSubtotal;
-    const subtotalAfterDiscounts = calculateSubtotal() - items.reduce((sum, item) => 
+  
+    // Apply overall discount proportionally
+    const totalBeforeOverallDiscount = calculateSubtotal() - items.reduce((sum, item) => 
       sum + calculateItemDiscountAmount(item), 0
     );
-
-    if (memberSubtotal > 0 && subtotalAfterDiscounts > 0) {
+    
+    if (memberSubtotal > 0 && totalBeforeOverallDiscount > 0) {
+      const memberRatio = memberSubtotal / totalBeforeOverallDiscount;
+      const overallDiscountAmount = calculateOverallDiscountAmount(totalBeforeOverallDiscount);
+      memberSubtotal -= overallDiscountAmount * memberRatio;
+  
+      // Apply additional fees
       additionalFees.forEach(fee => {
         const feeValue = parseFloat(fee.value) || 0;
         if (fee.type === 'percentage') {
-          const memberProportion = memberSubtotal / subtotalAfterDiscounts;
-          totalAfterFees += (subtotalAfterDiscounts * (feeValue / 100)) * memberProportion;
+          memberSubtotal += (memberSubtotal * (feeValue / 100));
         } else {
-          totalAfterFees += feeValue / members.length;
+          memberSubtotal += feeValue / members.length;
         }
       });
     }
-
-    return totalAfterFees;
+  
+    return memberSubtotal;
   };
 
   const addFee = (): void => {
@@ -437,12 +476,21 @@ const BillCalculator = () => {
       };
       
       setAdditionalFees([...additionalFees, newFeeWithId]);
-      setNewFee({ name: '', value: '', type: 'percentage' });
+      setNewFee({ name: '', value: '', type: newFee.type });
       
       if (additionalFeesRef.current) {
         setTimeout(() => scrollToElement(additionalFeesRef), 100);
       }
     }
+  };
+
+  const calculateOverallDiscountAmount = (subtotalAfterItemDiscounts: number): number => {
+    const value = parseFloat(overallDiscount.value) || 0;
+    if (value <= 0) return 0;
+    
+    return overallDiscount.type === 'percentage'
+      ? subtotalAfterItemDiscounts * (value / 100)
+      : Math.min(value, subtotalAfterItemDiscounts);
   };
 
   useEffect(() => {
@@ -683,28 +731,28 @@ const BillCalculator = () => {
                         </button>
                         {itemMenuOpen === item.id && (
                           <div className="absolute right-0 mt-2 w-48 py-2 bg-gray-800 rounded-lg shadow-xl z-10">
-                            <button
-                              className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
-                              onClick={() => handleShareClick(item)}
-                            >
-                              <Split size={14} />
-                              Share Item
-                            </button>
-                            <button
-                              className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
-                              onClick={() => {
-                                setTempDiscount({
-                                  type: item.discount?.type || 'percentage',
-                                  value: item.discount?.value || 0
-                                });
-                                setActivePopup({ itemId: item.id, type: 'discount' });
-                                setItemMenuOpen(null);
-                              }}
-                            >
-                              <Tag size={14} />
-                              Add Discount
-                            </button>
-                          </div>
+                          <button
+                            className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                            onClick={() => handleShareClick(item)}
+                          >
+                            <Split size={14} />
+                            Share Item
+                          </button>
+                          <button
+                            className="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                            onClick={() => {
+                              setTempDiscount({
+                                type: item.discount?.type || 'percentage',
+                                value: item.discount?.value || 0
+                              });
+                              setActivePopup({ itemId: item.id, type: 'discount' });
+                              setItemMenuOpen(null);
+                            }}
+                          >
+                            <Tag size={14} />
+                            {item.discount && Number(item.discount.value) > 0 ? 'Edit Discount' : 'Add Discount'}
+                          </button>
+                        </div>
                         )}
                       </div>
                     </div>
@@ -818,113 +866,79 @@ const BillCalculator = () => {
                 </div>
 
                 {/* Safe Share PopUp */}
-                  {activePopup.itemId === item.id && activePopup.type === 'share' && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                      <div className="bg-gray-800 p-4 sm:p-6 rounded-xl w-full max-w-sm sm:w-96 space-y-4">
-                        <h3 className="text-lg font-semibold">Share {item.name}</h3>
-                        <div className="space-y-4">
-                        <div className="space-y-2">
-                          <label className="block text-sm text-gray-400 mb-1">Number of people sharing:</label>
-                          <div className="flex items-center justify-center space-x-2">
-                            {/* Decrement Button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (tempSharedQty > 1) {
-                                  setTempSharedQty(tempSharedQty - 1);
-                                }
-                              }}
-                              className="w-12 h-12 bg-gray-600 text-white text-xl rounded-full hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              aria-label="Decrease"
-                              disabled={tempSharedQty <= 1} // Disable button when at minimum value
-                            >
-                              -
-                            </button>
-
-                            {/* Input Field */}
-                            <input
-                              type="number"
-                              min="1"
-                              max="20"
-                              value={tempSharedQty}
-                              onChange={(e) => {
-                                const inputValue = parseInt(e.target.value) || 1;
-                                setTempSharedQty(Math.min(Math.max(1, inputValue), 20));
-                              }}
-                              className="w-16 text-center bg-gray-700/50 text-lg px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              onWheel={(e) => {
-                                (e.target as HTMLInputElement).blur();
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === '-' || e.key === 'e' || e.key === '.') {
-                                  e.preventDefault();
-                                }
-                              }}
-                            />
-
-                            {/* Increment Button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (tempSharedQty < 20) {
-                                  setTempSharedQty(tempSharedQty + 1);
-                                }
-                              }}
-                              className="w-12 h-12 bg-gray-600 text-white text-xl rounded-full hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              aria-label="Increase"
-                              disabled={tempSharedQty >= 20} // Disable button when at maximum value
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                          <div className="text-sm bg-gray-700/20 p-3 rounded-lg space-y-2">
-                            <div className="flex justify-between">
-                              <span>Total item price:</span>
-                              <span>{formatCurrency(Number(item.price) || 0)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Price per share:</span>
-                              <span>{formatCurrency((Number(item.price) || 0) / tempSharedQty)}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-end gap-2 pt-2">
-                          <button
-                            className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600"
-                            onClick={() => setActivePopup({ itemId: null, type: null })}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700"
-                            onClick={() => updateItemSharedQty(item.id)}
-                          >
-                            Apply
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                {/* Share Popup
                 {activePopup.itemId === item.id && activePopup.type === 'share' && (
-                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-gray-800 p-6 rounded-xl w-96 space-y-4">
-                      <h3 className="text-lg font-semibold">Share Item</h3>
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 p-4 sm:p-6 rounded-xl w-full max-w-sm sm:w-96 space-y-4">
+                      <h3 className="text-lg font-semibold">Share {item.name}</h3>
+                      <div className="space-y-4">
                       <div className="space-y-2">
-                        <label className="block text-sm text-gray-400">Split into portions:</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max={item.qty}
-                          value={tempSharedQty}
-                          onChange={(e) => setTempSharedQty(Math.max(1, Math.min(parseInt(e.target.value) || 1, item.qty)))}
-                          className="w-full bg-gray-700/50 rounded-lg px-3 py-2"
-                        />
+                        <label className="block text-sm text-gray-400 mb-1">Number of people sharing:</label>
+                        <div className="flex items-center justify-center space-x-2">
+                          {/* Decrement Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (tempSharedQty > 1) {
+                                setTempSharedQty(tempSharedQty - 1);
+                              }
+                            }}
+                            className="w-12 h-12 bg-gray-600 text-white text-xl rounded-full hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-label="Decrease"
+                            disabled={tempSharedQty <= 1} // Disable button when at minimum value
+                          >
+                            -
+                          </button>
+
+                          {/* Input Field */}
+                          <input
+                            type="number"
+                            min="1"
+                            max="20"
+                            value={tempSharedQty}
+                            onChange={(e) => {
+                              const inputValue = parseInt(e.target.value) || 1;
+                              setTempSharedQty(Math.min(Math.max(1, inputValue), 20));
+                            }}
+                            className="w-16 text-center bg-gray-700/50 text-lg px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            onWheel={(e) => {
+                              (e.target as HTMLInputElement).blur();
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === '-' || e.key === 'e' || e.key === '.') {
+                                e.preventDefault();
+                              }
+                            }}
+                          />
+
+                          {/* Increment Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (tempSharedQty < 20) {
+                                setTempSharedQty(tempSharedQty + 1);
+                              }
+                            }}
+                            className="w-12 h-12 bg-gray-600 text-white text-xl rounded-full hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-label="Increase"
+                            disabled={tempSharedQty >= 20} // Disable button when at maximum value
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex justify-end gap-2">
+                        <div className="text-sm bg-gray-700/20 p-3 rounded-lg space-y-2">
+                          <div className="flex justify-between">
+                            <span>Total item price:</span>
+                            <span>{formatCurrency(Number(item.price) || 0)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Price per share:</span>
+                            <span>{formatCurrency((Number(item.price) || 0) / tempSharedQty)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2">
                         <button
                           className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600"
                           onClick={() => setActivePopup({ itemId: null, type: null })}
@@ -940,70 +954,115 @@ const BillCalculator = () => {
                       </div>
                     </div>
                   </div>
-                )} */}
+                )}
 
                 {/* Discount Popup */}
                 {activePopup.itemId === item.id && activePopup.type === 'discount' && (
-                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                      <div className="bg-gray-800 p-4 sm:p-6 rounded-xl w-full max-w-sm sm:w-96 space-y-4">
-                      <h3 className="text-lg font-semibold">Add Discount</h3>
-                      <div className="space-y-4">
-                        <div className="flex bg-gray-700/50 rounded-lg p-1">
-                          <button
-                            onClick={() => setTempDiscount({ ...tempDiscount, type: 'percentage' })}
-                            className={`flex-1 px-3 py-1 rounded flex items-center justify-center gap-1 ${
-                              tempDiscount.type === 'percentage' ? 'bg-blue-600' : ''
-                            }`}
-                          >
-                            <Percent size={16} /> Percentage
-                          </button>
-                          <button
-                            onClick={() => setTempDiscount({ ...tempDiscount, type: 'amount' })}
-                            className={`flex-1 px-3 py-1 rounded flex items-center justify-center gap-1 ${
-                              tempDiscount.type === 'amount' ? 'bg-blue-600' : ''
-                            }`}
-                          >
-                            <DollarSign size={16} /> Amount
-                          </button>
-                        </div>
-                        <input
-                          type="number"
-                          value={tempDiscount.value === 0 ? "" : tempDiscount.value}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue === "") {
-                              setTempDiscount({ ...tempDiscount, value: 0 });
-                            } else {
-                              const parsedValue = parseFloat(inputValue) || 0;
-                              setTempDiscount({ ...tempDiscount, value: Math.max(0, parsedValue) });
-                            }
-                          }}
-                          min="0"
-                          className="w-full bg-gray-700/50 rounded-lg px-3 py-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          placeholder={tempDiscount.type === 'percentage' ? 'Percentage' : 'Amount'}
-                          onWheel={(e) => e.preventDefault()}
-                        />
-                      </div>
-                      <div className="flex justify-end gap-2">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-gray-800 p-4 sm:p-6 rounded-xl w-full max-w-sm sm:w-96 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold">
+                      {item.discount && Number(item.discount.value) > 0 ? 'Edit Discount' : 'Add Discount'}
+                    </h3>
+                    {item.discount && Number(item.discount.value) > 0 && (
+                      <button
+                        onClick={() => removeItemDiscount(item.id)}
+                        className="text-red-400 hover:text-red-300 p-1"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                    <div className="space-y-4">
+                      <div className="flex bg-gray-700/50 rounded-lg p-1">
                         <button
-                          className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600"
-                          onClick={() => setActivePopup({ itemId: null, type: null })}
+                          onClick={() => setTempDiscount({ ...tempDiscount, type: 'percentage' })}
+                          className={`flex-1 px-3 py-1 rounded flex items-center justify-center gap-1 ${
+                            tempDiscount.type === 'percentage' ? 'bg-blue-600' : ''
+                          }`}
                         >
-                          Cancel
+                          <Percent size={16} /> Percentage
                         </button>
                         <button
-                          className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700"
-                          onClick={() => updateItemDiscount(item.id)}
+                          onClick={() => setTempDiscount({ ...tempDiscount, type: 'amount' })}
+                          className={`flex-1 px-3 py-1 rounded flex items-center justify-center gap-1 ${
+                            tempDiscount.type === 'amount' ? 'bg-blue-600' : ''
+                          }`}
                         >
-                          Apply
+                          <DollarSign size={16} /> Amount
                         </button>
                       </div>
+                      <input
+                        type="number"
+                        value={tempDiscount.value === 0 ? "" : tempDiscount.value}
+                        onChange={(e) => {
+                          const inputValue = e.target.value;
+                          if (inputValue === "") {
+                            setTempDiscount({ ...tempDiscount, value: 0 });
+                          } else {
+                            const parsedValue = parseFloat(inputValue) || 0;
+                            setTempDiscount({ ...tempDiscount, value: Math.max(0, parsedValue) });
+                          }
+                        }}
+                        min="0"
+                        className="w-full bg-gray-700/50 rounded-lg px-3 py-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        placeholder={tempDiscount.type === 'percentage' ? 'Percentage' : 'Amount'}
+                        onWheel={(e) => e.preventDefault()}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600"
+                        onClick={() => setActivePopup({ itemId: null, type: null })}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700"
+                        onClick={() => updateItemDiscount(item.id)}
+                      >
+                        Apply
+                      </button>
                     </div>
                   </div>
+                </div>
                 )}
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Overall Discount Section */}
+        <div className="bg-gray-800/50 rounded-xl p-4 sm:p-6 space-y-4">
+          <h2 className="text-lg sm:text-xl font-semibold">Discount</h2>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              placeholder="Discount value"
+              value={overallDiscount.value}
+              onChange={(e) => setOverallDiscount({ ...overallDiscount, value: e.target.value })}
+              className="flex-1 bg-gray-700/50 rounded-lg px-2 sm:px-3 py-2 text-sm sm:text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <div className="flex bg-gray-700/50 rounded-lg p-1">
+              <button
+                onClick={() => setOverallDiscount({ ...overallDiscount, type: 'percentage' })}
+                className={`w-8 h-8 rounded flex items-center justify-center ${overallDiscount.type === 'percentage' ? 'bg-blue-600' : ''}`}
+              >
+                <Percent size={16} />
+              </button>
+              <button
+                onClick={() => setOverallDiscount({ ...overallDiscount, type: 'amount' })}
+                className={`w-8 h-8 rounded flex items-center justify-center ${overallDiscount.type === 'amount' ? 'bg-blue-600' : ''}`}
+              >
+                <DollarSign size={16} />
+              </button>
+            </div>
+          </div>
+          {parseFloat(overallDiscount.value) > 0 && (
+            <div className="text-sm text-gray-400">
+              Discount: {overallDiscount.type === 'percentage' ? `${overallDiscount.value}%` : formatCurrency(parseFloat(overallDiscount.value))}
+            </div>
+          )}
         </div>
 
         {/* Additional Fees Section */}
@@ -1125,6 +1184,17 @@ const BillCalculator = () => {
                     sum + calculateItemDiscountAmount(item), 0
                   ))}</span>
                 </div>
+              </div>
+            )}
+            {/* Overall discount */}
+            {parseFloat(overallDiscount.value) > 0 && (
+              <div className="flex justify-between text-sm text-gray-400">
+                <span>Overall discount ({overallDiscount.type === 'percentage' ? `${overallDiscount.value}%` : 'fixed'}):</span>
+                <span className="text-red-400">
+                  -{formatCurrency(calculateOverallDiscountAmount(
+                    calculateSubtotal() - items.reduce((sum, item) => sum + calculateItemDiscountAmount(item), 0)
+                  ))}
+                </span>
               </div>
             )}
             {/* Additional Fees */}
