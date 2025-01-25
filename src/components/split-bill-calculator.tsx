@@ -364,10 +364,10 @@ const BillCalculator = () => {
 
   const calculateMemberShare = (memberId: number): number => {
     let memberSubtotal = 0;
-    const totalSubtotal = calculateSubtotal();
+    //const totalSubtotal = calculateSubtotal();
 
     items.forEach(item => {
-      let itemPrice = parseFloat(item.price) || 0;
+      //let itemPrice = parseFloat(item.price) || 0;
 
       const split = item.splits.find(s => s.memberId === memberId) ?? { 
         memberId: memberId, 
