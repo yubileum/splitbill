@@ -14,7 +14,7 @@ import {
   Split,
   Tag,
   CircleDollarSign, 
-  CircleDot    
+  CircleDot,
 } from 'lucide-react';
 
 type Currency = {
@@ -95,6 +95,7 @@ const BillCalculator = () => {
     value: '',
     type: 'percentage'
   });
+  const [expandedMembers, setExpandedMembers] = useState<Set<number>>(new Set());
 
   const scrollToElement = (ref: React.RefObject<HTMLDivElement | null>): void => {
     if (ref.current) {
@@ -1222,15 +1223,86 @@ const BillCalculator = () => {
               <h3 className="font-semibold text-base sm:text-lg">Individual Shares</h3>
               {members.map(member => {
                 const share = calculateMemberShare(member.id);
+                const isExpanded = expandedMembers.has(member.id);
+                const memberItems = items.filter(item => 
+                  item.splits.some(split => split.memberId === member.id && split.quantity > 0)
+                );
+
                 return (
-                  <div key={member.id} className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-6 h-6 rounded-full ${member.color} flex items-center justify-center`}>
-                        {member.name[0].toUpperCase()}
+                  <div key={member.id} className="space-y-2">
+                    <div 
+                      className="flex justify-between items-center cursor-pointer hover:bg-gray-700/30 rounded-lg p-2"
+                      onClick={() => {
+                        setExpandedMembers(prev => {
+                          const newSet = new Set(prev);
+                          if (isExpanded) {
+                            newSet.delete(member.id);
+                          } else {
+                            newSet.add(member.id);
+                          }
+                          return newSet;
+                        });
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-6 h-6 rounded-full ${member.color} flex items-center justify-center`}>
+                          {member.name[0].toUpperCase()}
+                        </div>
+                        <span>{member.name}</span>
                       </div>
-                      <span>{member.name}</span>
+                      <div className="flex items-center gap-4">
+                        <span>{formatCurrency(share)}</span>
+                        <ChevronDown 
+                          size={16} 
+                          className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        />
+                      </div>
                     </div>
-                    <span>{formatCurrency(share)}</span>
+                    
+                    {isExpanded && memberItems.length > 0 && (
+                      <div className="ml-8 space-y-2 bg-gray-700/20 rounded-lg p-3">
+                        {memberItems.map(item => {
+                          const split = item.splits.find(s => s.memberId === member.id);
+                          if (!split) return null;
+                          
+                          const itemTotal = item.isPriceTotal ? Number(item.price) : Number(item.price) * item.qty;
+                          const sharePrice = (itemTotal / (item.sharedQty > 1 ? item.sharedQty : item.splits.reduce((sum, s) => sum + s.quantity, 0))) * split.quantity;
+                          
+                          return (
+                            <div key={item.id} className="flex justify-between text-sm text-gray-400">
+                              <div>
+                                <span>{item.name || 'Unnamed item'}</span>
+                                {item.sharedQty > 1 ? (
+                                  <span className="text-gray-500"> ({split.quantity}/{item.sharedQty} shares)</span>
+                                ) : (
+                                  <span className="text-gray-500"> ({split.quantity} qty)</span>
+                                )}
+                              </div>
+                              <span>{formatCurrency(sharePrice)}</span>
+                            </div>
+                          );
+                        })}
+                        
+                        {additionalFees.length > 0 && (
+                          <>
+                            <div className="border-t border-gray-600 my-2"></div>
+                            {additionalFees.map(fee => {
+                              const baseAmount = calculateSubtotal() - items.reduce((sum, item) => sum + calculateItemDiscountAmount(item), 0);
+                              const feeAmount = fee.type === 'percentage' 
+                                ? (baseAmount * parseFloat(fee.value) / 100) / members.length
+                                : parseFloat(fee.value) / members.length;
+                              
+                              return (
+                                <div key={fee.id} className="flex justify-between text-sm text-gray-400">
+                                  <span>{fee.name}</span>
+                                  <span>{formatCurrency(feeAmount)}</span>
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
